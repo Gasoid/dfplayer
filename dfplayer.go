@@ -79,6 +79,7 @@ func readUart(r io.Reader) ([]byte, error) {
 		if err != nil {
 			return nil, &ErrUartRead{text: "Couldn't read from UART", err: err}
 		}
+
 		if n == 0 {
 			time.Sleep(pollInterval)
 			continue
@@ -120,6 +121,7 @@ func readAvailable(r io.Reader, buf []byte) (int, error) {
 	if avail == 0 {
 		return 0, nil
 	}
+
 	if avail > len(buf) {
 		avail = len(buf)
 	}
@@ -164,6 +166,26 @@ func (d *Dfplayer) IsTrackFinished() (bool, error) {
 	return TrackFinishedCode == code, nil
 }
 
+// WaitTrack blocks until a track finishes or the timeout expires.
+// Typical usage after play:
+//
+//	if err := player.WaitTrack(5 * time.Second); err != nil {
+//	    println("dfplayer error:", err.Error())
+//	}
+func (d *Dfplayer) WaitTrack(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		finished, _ := d.IsTrackFinished()
+		if finished {
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return &ErrDfplayer{"timeout waiting for track"}
+		}
+	}
+}
+
 // IsReady checks whether the DFPlayer is ready to accept commands.
 // Call this after power-on before sending playback commands.
 func (d *Dfplayer) IsReady() (bool, error) {
@@ -188,6 +210,7 @@ func (d *Dfplayer) WaitReady(timeout time.Duration) error {
 		if ready {
 			return nil
 		}
+
 		if time.Now().After(deadline) {
 			return &ErrDfplayer{"timeout waiting for DFPlayer to become ready"}
 		}

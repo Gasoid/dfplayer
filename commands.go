@@ -223,6 +223,7 @@ func (d *Dfplayer) RepeatFolder(folder uint16) error {
 	if folder == 0 || folder > 99 {
 		return &ErrDfplayer{"wrong folder, folder is 0 or greater than 99"}
 	}
+
 	return d.SendCmd(RepeatFolderCode, folder)
 }
 
