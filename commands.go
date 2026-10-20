@@ -270,3 +270,29 @@ func (d *Dfplayer) Drain() error {
 
 	return nil
 }
+
+type State uint8
+
+const (
+	StateStopped State = iota
+	StatePlaying
+	StatePaused
+)
+
+// GetState returns state of dfplayer: Stopped, Playing or Paused
+func (d *Dfplayer) GetState() (State, error) {
+	if err := d.SendCmd(StateCode, disableParam); err != nil {
+		return 0, err
+	}
+
+	msg, err := d.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	if msg.Cmd == StateCode {
+		return State(msg.ParamL), nil
+	}
+
+	return 0, &ErrDfplayer{"state has not received"}
+}

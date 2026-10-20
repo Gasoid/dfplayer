@@ -42,3 +42,15 @@ type ErrDfplayer struct {
 func (e *ErrDfplayer) Error() string {
 	return e.text
 }
+
+var (
+	ErrBusy             = &ErrDfplayer{text: "Module is busy"}
+	ErrSleeping         = &ErrDfplayer{text: "Module is sleeping"}
+	ErrSerialWrongStack = &ErrDfplayer{text: "Wrong Stack"}
+	ErrCheckSumNotMatch = &ErrDfplayer{text: "Checksum Error"}
+	ErrFileIndexOut     = &ErrDfplayer{text: "File Index Out of Range"}
+	ErrFileMismatch     = &ErrDfplayer{text: "File Mismatch"}
+	ErrAdvertise        = &ErrDfplayer{text: "Advertise Error"}
+
+	ErrTimeout = &ErrDfplayer{text: "timeout error, dfplayer has not answered within expected time"}
+)
