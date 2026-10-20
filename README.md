@@ -35,10 +35,12 @@ import (
 )
 
 func main() {
-	// Configure UART1 at 9600 baud (pins vary by board)
-	uart := machine.UART1
+	// Configure UART2 at 9600 baud (pins vary by board)
+	uart := machine.UART2
 	uart.Configure(machine.UARTConfig{
 		BaudRate: 9600,
+		TX:       machine.UART_TX_PIN, // Replace with your board's TX pin
+		RX:       machine.UART_RX_PIN, // Replace with your board's RX pin
 	})
 
 	player, _ := dfplayer.New(uart)
@@ -60,21 +62,6 @@ func main() {
 	player.Pause()
 }
 ```
-
-### Flashing to your board
-
-```sh
-# Arduino Nano 33 IoT
-tinygo flash -target=arduino-nano33 ./main.go
-
-# Raspberry Pi Pico
-tinygo flash -target=pico ./main.go
-
-# ESP32
-tinygo flash -target=esp32-coreboard-v2 ./main.go
-```
-
-Adjust the `machine.UART` and pin configuration for your specific board.
 
 ## API Overview
 
@@ -150,6 +137,7 @@ Adjust the `machine.UART` and pin configuration for your specific board.
 |--------|-------------|
 | `IsTrackFinished() (bool, error)` | Check if the current track has finished |
 | `IsReady() (bool, error)` | Check if the module is ready to accept commands |
+| `WaitTrack(timeout time.Duration) error` | Block until the current track finishes or timeout occurs |
 
 ## Error Handling
 
@@ -160,23 +148,6 @@ The package defines three error types:
 - **`ErrDfplayer`** — DFPlayer protocol errors (invalid parameter, checksum mismatch, module error response)
 
 All error types implement the `error` interface. `ErrUartRead` and `ErrUartWrite` also implement `Unwrap()` for use with `errors.Is` and `errors.As`.
-
-## Hardware Setup
-
-Connect the DFPlayer Mini to your microcontroller:
-
-| DFPlayer | Board     |
-|----------|-----------|
-| VCC      | 3.3V–5V   |
-| GND      | GND       |
-| RX       | TX (UART) |
-| TX       | RX (UART) |
-
-The module communicates at **9600 baud**, 8 data bits, no parity, 1 stop bit (8N1).
-
-The DFPlayer accepts 3.3V–5V logic levels. Most 3.3V boards (Pico, ESP32, Nano 33 IoT) work without level shifting. For 5V-only UART boards, add a level shifter or voltage divider on the RX line.
-
-Supported TinyGo targets include Arduino Nano 33 IoT, Raspberry Pi Pico (RP2040), ESP32, STM32, and any board with a UART peripheral.
 
 ## License
 
