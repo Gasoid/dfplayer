@@ -52,5 +52,6 @@ var (
 	ErrFileMismatch     = &ErrDfplayer{text: "File Mismatch"}
 	ErrAdvertise        = &ErrDfplayer{text: "Advertise Error"}
 
-	ErrTimeout = &ErrDfplayer{text: "timeout error, dfplayer has not answered within expected time"}
+	ErrTimeout        = &ErrDfplayer{text: "timeout error, dfplayer has not answered within expected time"}
+	ErrUnexpectedCode = &ErrDfplayer{text: "unexpected message code"}
 )

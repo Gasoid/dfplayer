@@ -21,7 +21,7 @@ const (
 // DPCode represents a DFPlayer command or response code.
 type DPCode uint8
 
-type ErrorParam uint8
+type errorParam uint8
 
 // Response codes sent by the DFPlayer.
 const (
@@ -60,25 +60,48 @@ const (
 	RandomCode
 	RepeatCurrentCode
 	DACCode
-
-	StateCode DPCode = 0x42
 )
 
 const (
-	_ ErrorParam = iota
-	Busy
-	Sleeping
-	SerialWrongStack
-	CheckSumNotMatch
-	FileIndexOut
-	FileMismatch
-	Advertise
+	StateCode DPCode = 0x42 + iota
+	VolumeCode
+	EqCode
+	PlaybackModeCode
+	SoftwareVersionCode
+	TotalFilesUDiskCode
+	TotalFilesSDCode
+	TotalFilesFlashCode
+	// 0x4A is "Keep on" — undocumented, no known function.
+)
+
+const (
+	CurrentTrackUDiskCode DPCode = 0x4B + iota
+	CurrentTrackSDCode
+	CurrentTrackFlashCode
+	FileCountsInFolderCode
+	TotalFoldersCode
+)
+
+const (
+	_ errorParam = iota
+	busy
+	sleeping
+	serialWrongStack
+	checkSumNotMatch
+	fileIndexOut
+	fileMismatch
+	advertise
 )
 
 type Message struct {
 	Cmd    DPCode
 	ParamH uint8
 	ParamL uint8
+}
+
+// Param returns the full 16-bit parameter value (ParamH<<8 | ParamL).
+func (m *Message) Param() uint16 {
+	return uint16(m.ParamH)<<8 | uint16(m.ParamL)
 }
 
 // readUart reads a 10-byte packet from the UART reader with a 500ms deadline.
@@ -171,20 +194,20 @@ func (d *Dfplayer) ReadMessage() (*Message, error) {
 	}
 
 	if ErrorCode == DPCode(data[3]) {
-		switch ErrorParam(data[6]) {
-		case Busy:
+		switch errorParam(data[6]) {
+		case busy:
 			return nil, ErrBusy
-		case Sleeping:
+		case sleeping:
 			return nil, ErrSleeping
-		case SerialWrongStack:
+		case serialWrongStack:
 			return nil, ErrSerialWrongStack
-		case CheckSumNotMatch:
+		case checkSumNotMatch:
 			return nil, ErrCheckSumNotMatch
-		case FileIndexOut:
+		case fileIndexOut:
 			return nil, ErrFileIndexOut
-		case FileMismatch:
+		case fileMismatch:
 			return nil, ErrFileMismatch
-		case Advertise:
+		case advertise:
 			return nil, ErrAdvertise
 		default:
 			return nil, &ErrDfplayer{"dfplayer returns error, but error is unknown"}

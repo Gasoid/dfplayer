@@ -8,7 +8,6 @@ The DFPlayer Mini is a low-cost MP3 player module controlled via serial commands
 
 <img width="70%" alt="IMG_6117" src="https://github.com/user-attachments/assets/6304741c-243b-4478-8e8a-e78f15be582e" />
 
-
 ## Features
 
 - Full command set: play, pause, stop, volume, EQ, repeat, shuffle, and more
@@ -64,7 +63,7 @@ func main() {
 	player.WaitTrack(3 * time.Second) // Wait for 3 seconds
 
 	// Play track 0001.mp3 from large 01 folder
-	player.PlayLargeFolderTrack(1, 1)
+	player.PlayLargeFolder(1, 1)
 	player.WaitTrack(3 * time.Second) // Wait for 3 seconds
 
 	player.Pause()

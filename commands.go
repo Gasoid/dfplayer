@@ -271,17 +271,20 @@ func (d *Dfplayer) Drain() error {
 	return nil
 }
 
+// State represents the playback status reported by the DFPlayer.
+// Note: the DFPlayer hardware only reports two states — playing or not playing.
+// There is no separate "paused" state; after pausing, the module reports stopped.
 type State uint8
 
 const (
 	StateStopped State = iota
 	StatePlaying
-	StatePaused
 )
 
-// GetState returns state of dfplayer: Stopped, Playing or Paused
+// GetState queries the current playback status.
+// Returns StatePlaying (1) when a track is active, StateStopped (0) otherwise.
 func (d *Dfplayer) GetState() (State, error) {
-	if err := d.SendCmd(StateCode, disableParam); err != nil {
+	if err := d.SendCmd(StateCode, noParam); err != nil {
 		return 0, err
 	}
 
@@ -294,5 +297,195 @@ func (d *Dfplayer) GetState() (State, error) {
 		return State(msg.ParamL), nil
 	}
 
-	return 0, &ErrDfplayer{"state has not received"}
+	return 0, ErrUnexpectedCode
+}
+
+// GetVolume queries the current volume.
+func (d *Dfplayer) GetVolume() (uint16, error) {
+	if err := d.SendCmd(VolumeCode, noParam); err != nil {
+		return 0, err
+	}
+
+	msg, err := d.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	if msg.Cmd == VolumeCode {
+		return uint16(msg.ParamL), nil
+	}
+
+	return 0, ErrUnexpectedCode
+}
+
+// GetEq queries the current equalizer mode.
+func (d *Dfplayer) GetEq() (EqMode, error) {
+	if err := d.SendCmd(EqCode, noParam); err != nil {
+		return 0, err
+	}
+
+	msg, err := d.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	if msg.Cmd == EqCode {
+		return EqMode(msg.ParamL), nil
+	}
+
+	return 0, ErrUnexpectedCode
+}
+
+// GetPlaybackMode queries the current playback mode.
+// Note: the meaning of the returned value is firmware-dependent and of limited use.
+func (d *Dfplayer) GetPlaybackMode() (uint16, error) {
+	if err := d.SendCmd(PlaybackModeCode, noParam); err != nil {
+		return 0, err
+	}
+
+	msg, err := d.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	if msg.Cmd == PlaybackModeCode {
+		return msg.Param(), nil
+	}
+
+	return 0, ErrUnexpectedCode
+}
+
+// GetSoftwareVersion queries the DFPlayer firmware version number.
+func (d *Dfplayer) GetSoftwareVersion() (uint16, error) {
+	if err := d.SendCmd(SoftwareVersionCode, noParam); err != nil {
+		return 0, err
+	}
+
+	msg, err := d.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	if msg.Cmd == SoftwareVersionCode {
+		return uint16(msg.ParamL), nil
+	}
+
+	return 0, ErrUnexpectedCode
+}
+
+// GetTotalFiles returns the total number of files on the specified storage source.
+// Supported sources: SourceUSB, SourceSD, SourceFlash.
+func (d *Dfplayer) GetTotalFiles(source Source) (uint16, error) {
+	code, err := totalFilesCode(source)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := d.SendCmd(code, noParam); err != nil {
+		return 0, err
+	}
+
+	msg, err := d.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	if msg.Cmd == code {
+		return msg.Param(), nil
+	}
+
+	return 0, ErrUnexpectedCode
+}
+
+// GetCurrentTrack returns the number of the currently playing track on the specified source.
+// Supported sources: SourceUSB, SourceSD, SourceFlash.
+func (d *Dfplayer) GetCurrentTrack(source Source) (uint16, error) {
+	code, err := currentTrackCode(source)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := d.SendCmd(code, noParam); err != nil {
+		return 0, err
+	}
+
+	msg, err := d.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	if msg.Cmd == code {
+		return msg.Param(), nil
+	}
+
+	return 0, ErrUnexpectedCode
+}
+
+// GetFileCountsInFolder returns the number of files in the specified folder (1–99).
+func (d *Dfplayer) GetFileCountsInFolder(folder uint16) (uint16, error) {
+	if folder == 0 || folder > 99 {
+		return 0, &ErrDfplayer{"wrong folder, folder is 0 or greater than 99"}
+	}
+
+	if err := d.SendCmd(FileCountsInFolderCode, folder); err != nil {
+		return 0, err
+	}
+
+	msg, err := d.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	if msg.Cmd == FileCountsInFolderCode {
+		return uint16(msg.ParamL), nil
+	}
+
+	return 0, ErrUnexpectedCode
+}
+
+// GetTotalFolders returns the total number of folders on the current storage device,
+// including the root directory.
+func (d *Dfplayer) GetTotalFolders() (uint16, error) {
+	if err := d.SendCmd(TotalFoldersCode, noParam); err != nil {
+		return 0, err
+	}
+
+	msg, err := d.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	if msg.Cmd == TotalFoldersCode {
+		return uint16(msg.ParamL), nil
+	}
+
+	return 0, ErrUnexpectedCode
+}
+
+// totalFilesCode maps a storage source to the corresponding query command.
+func totalFilesCode(source Source) (DPCode, error) {
+	switch source {
+	case SourceUSB:
+		return TotalFilesUDiskCode, nil
+	case SourceSD:
+		return TotalFilesSDCode, nil
+	case SourceFlash:
+		return TotalFilesFlashCode, nil
+	default:
+		return 0, &ErrDfplayer{"unsupported source for GetTotalFiles: use SourceUSB, SourceSD, or SourceFlash"}
+	}
+}
+
+// currentTrackCode maps a storage source to the corresponding query command.
+func currentTrackCode(source Source) (DPCode, error) {
+	switch source {
+	case SourceUSB:
+		return CurrentTrackUDiskCode, nil
+	case SourceSD:
+		return CurrentTrackSDCode, nil
+	case SourceFlash:
+		return CurrentTrackFlashCode, nil
+	default:
+		return 0, &ErrDfplayer{"unsupported source for GetCurrentTrack: use SourceUSB, SourceSD, or SourceFlash"}
+	}
 }
