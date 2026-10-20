@@ -171,7 +171,7 @@ func TestIsChecksumValid(t *testing.T) {
 
 func TestSendCmd_PacketStructure(t *testing.T) {
 	f := &fakeReadWriter{}
-	err := sendCmd(f, NextTrackCode, noParam)
+	err := sendMessage(f, NextTrackCode, noParam)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestSendCmd_PacketStructure(t *testing.T) {
 
 func TestSendCmd_WithParameter(t *testing.T) {
 	f := &fakeReadWriter{}
-	err := sendCmd(f, SetVolumeCode, 15)
+	err := sendMessage(f, SetVolumeCode, 15)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestSendCmd_WithParameter(t *testing.T) {
 
 func TestSendCmd_WriteError(t *testing.T) {
 	f := &fakeReadWriter{writeErr: errors.New("broken")}
-	err := sendCmd(f, NextTrackCode, noParam)
+	err := sendMessage(f, NextTrackCode, noParam)
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -326,7 +326,7 @@ func TestNew(t *testing.T) {
 // SendCmd method tests
 // ============================================================================
 
-func TestDfplayerSendCmd(t *testing.T) {
+func TestDfplayerSendMessage(t *testing.T) {
 	f := &fakeReadWriter{}
 	d := &Dfplayer{uart: f}
 
@@ -750,12 +750,12 @@ func TestGetCmd_ValidResponse(t *testing.T) {
 	f := newFakeReadWriter(resp)
 	d := &Dfplayer{uart: f}
 
-	code, err := d.GetCmd()
+	msg, err := d.ReadMessage()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if code != ReadyCode {
-		t.Errorf("code = 0x%02X, want ReadyCode (0x%02X)", code, ReadyCode)
+	if msg.Cmd != ReadyCode {
+		t.Errorf("code = 0x%02X, want ReadyCode (0x%02X)", msg.Cmd, ReadyCode)
 	}
 }
 
@@ -765,10 +765,11 @@ func TestGetCmd_InvalidChecksum(t *testing.T) {
 	f := newFakeReadWriter(resp)
 	d := &Dfplayer{uart: f}
 
-	_, err := d.GetCmd()
+	_, err := d.ReadMessage()
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
+
 	var de *ErrDfplayer
 	if !errors.As(err, &de) {
 		t.Errorf("expected *ErrDfplayer, got %T", err)
@@ -776,22 +777,23 @@ func TestGetCmd_InvalidChecksum(t *testing.T) {
 }
 
 func TestGetCmd_ErrorResponse(t *testing.T) {
-	// Simulate an error response (0x40 = ErrorCode)
-	// sum: FF+06+40+00+00+00 = 0x145, checksum = 0xFEBB
-	resp := []byte{0x7E, 0xFF, 0x06, 0x40, 0x00, 0x00, 0x00, 0xFE, 0xBB, 0xEF}
+	// Simulate an error response (0x40 = ErrorCode, param=0x01 = Busy)
+	// sum: FF+06+40+00+00+01 = 0x146, checksum = 0xFEBA
+	resp := []byte{0x7E, 0xFF, 0x06, 0x40, 0x00, 0x00, 0x01, 0xFE, 0xBA, 0xEF}
 	f := newFakeReadWriter(resp)
 	d := &Dfplayer{uart: f}
 
-	code, err := d.GetCmd()
+	msg, err := d.ReadMessage()
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if code != ErrorCode {
-		t.Errorf("code = 0x%02X, want ErrorCode (0x%02X)", code, ErrorCode)
+
+	if msg != nil {
+		t.Errorf("expected nil message on error, got %+v", msg)
 	}
-	var de *ErrDfplayer
-	if !errors.As(err, &de) {
-		t.Errorf("expected *ErrDfplayer, got %T", err)
+
+	if !errors.Is(err, ErrBusy) {
+		t.Errorf("expected ErrBusy, got %v", err)
 	}
 }
 
@@ -800,7 +802,7 @@ func TestGetCmd_ReadError(t *testing.T) {
 	f := newFakeReadWriter(nil)
 	d := &Dfplayer{uart: f}
 
-	_, err := d.GetCmd()
+	_, err := d.ReadMessage()
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

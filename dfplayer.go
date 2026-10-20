@@ -21,6 +21,8 @@ const (
 // DPCode represents a DFPlayer command or response code.
 type DPCode uint8
 
+type errorParam uint8
+
 // Response codes sent by the DFPlayer.
 const (
 	TrackFinishedCode DPCode = 0x3D + iota
@@ -59,6 +61,48 @@ const (
 	RepeatCurrentCode
 	DACCode
 )
+
+const (
+	StateCode DPCode = 0x42 + iota
+	VolumeCode
+	EqCode
+	PlaybackModeCode
+	SoftwareVersionCode
+	TotalFilesUDiskCode
+	TotalFilesSDCode
+	TotalFilesFlashCode
+	// 0x4A is "Keep on" — undocumented, no known function.
+)
+
+const (
+	CurrentTrackUDiskCode DPCode = 0x4B + iota
+	CurrentTrackSDCode
+	CurrentTrackFlashCode
+	FileCountsInFolderCode
+	TotalFoldersCode
+)
+
+const (
+	_ errorParam = iota
+	busy
+	sleeping
+	serialWrongStack
+	checkSumNotMatch
+	fileIndexOut
+	fileMismatch
+	advertise
+)
+
+type Message struct {
+	Cmd    DPCode
+	ParamH uint8
+	ParamL uint8
+}
+
+// Param returns the full 16-bit parameter value (ParamH<<8 | ParamL).
+func (m *Message) Param() uint16 {
+	return uint16(m.ParamH)<<8 | uint16(m.ParamL)
+}
 
 // readUart reads a 10-byte packet from the UART reader with a 500ms deadline.
 // It synchronizes on the start byte (0x7E) and returns the full packet.
@@ -138,32 +182,55 @@ func New(uart io.ReadWriter) (*Dfplayer, error) {
 	return &Dfplayer{uart}, nil
 }
 
-// GetCmd reads and returns the next command/response code from the DFPlayer.
-func (d *Dfplayer) GetCmd() (DPCode, error) {
+// ReadMessage reads and returns the next command/response code from the DFPlayer.
+func (d *Dfplayer) ReadMessage() (*Message, error) {
 	data, err := readUart(d.uart)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if !isChecksumValid(data) {
-		return 0, &ErrDfplayer{"checksum is invalid"}
+		return nil, &ErrDfplayer{"checksum is invalid"}
 	}
 
 	if ErrorCode == DPCode(data[3]) {
-		return ErrorCode, &ErrDfplayer{"dfplayer returns error"}
+		switch errorParam(data[6]) {
+		case busy:
+			return nil, ErrBusy
+		case sleeping:
+			return nil, ErrSleeping
+		case serialWrongStack:
+			return nil, ErrSerialWrongStack
+		case checkSumNotMatch:
+			return nil, ErrCheckSumNotMatch
+		case fileIndexOut:
+			return nil, ErrFileIndexOut
+		case fileMismatch:
+			return nil, ErrFileMismatch
+		case advertise:
+			return nil, ErrAdvertise
+		default:
+			return nil, &ErrDfplayer{"dfplayer returns error, but error is unknown"}
+		}
 	}
 
-	return DPCode(data[3]), nil
+	msg := Message{
+		Cmd:    DPCode(data[3]),
+		ParamH: data[5],
+		ParamL: data[6],
+	}
+
+	return &msg, nil
 }
 
 // IsTrackFinished checks whether the currently playing track has finished.
 func (d *Dfplayer) IsTrackFinished() (bool, error) {
-	code, err := d.GetCmd()
+	msg, err := d.ReadMessage()
 	if err != nil {
 		return false, err
 	}
 
-	return TrackFinishedCode == code, nil
+	return TrackFinishedCode == msg.Cmd, nil
 }
 
 // WaitTrack blocks until a track finishes or the timeout expires.
@@ -181,7 +248,7 @@ func (d *Dfplayer) WaitTrack(timeout time.Duration) error {
 		}
 
 		if time.Now().After(deadline) {
-			return &ErrDfplayer{"timeout waiting for track"}
+			return ErrTimeout
 		}
 	}
 }
@@ -189,12 +256,12 @@ func (d *Dfplayer) WaitTrack(timeout time.Duration) error {
 // IsReady checks whether the DFPlayer is ready to accept commands.
 // Call this after power-on before sending playback commands.
 func (d *Dfplayer) IsReady() (bool, error) {
-	code, err := d.GetCmd()
+	msg, err := d.ReadMessage()
 	if err != nil {
 		return false, err
 	}
 
-	return ReadyCode == code, nil
+	return ReadyCode == msg.Cmd, nil
 }
 
 // WaitReady blocks until the DFPlayer is ready or the timeout expires.
@@ -212,22 +279,22 @@ func (d *Dfplayer) WaitReady(timeout time.Duration) error {
 		}
 
 		if time.Now().After(deadline) {
-			return &ErrDfplayer{"timeout waiting for DFPlayer to become ready"}
+			return ErrTimeout
 		}
 	}
 }
 
 // SendCmd sends a command with a 16-bit parameter to the DFPlayer.
 func (d *Dfplayer) SendCmd(cmd DPCode, param uint16) error {
-	return sendCmd(d.uart, cmd, param)
+	return sendMessage(d.uart, cmd, param)
 }
 
-// sendCmd writes a properly formatted DFPlayer packet to the writer.
+// sendMessage writes a properly formatted DFPlayer packet to the writer.
 // Packet layout:
 //
 //	0: Start(0x7E) | 1: Version(0xFF) | 2: Length(0x06) | 3: Command
 //	4: Feedback(0x00) | 5: Param_H | 6: Param_L | 7: Checksum_H | 8: Checksum_L | 9: End(0xEF)
-func sendCmd(w io.Writer, cmd DPCode, param uint16) error {
+func sendMessage(w io.Writer, cmd DPCode, param uint16) error {
 	packet := []byte{
 		0x7E, 0xFF, 0x06, byte(cmd), 0x00,
 		byte(param >> 8),
